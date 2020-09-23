@@ -54,7 +54,7 @@
 4.`dirty_bitmap_mig_init()`
 - 脏内存页面标记初始化
 
-## 2. 调用栈
+## 2. Migrate调用栈
 
 **`hmp_migrate()`** 迁移部分
 
@@ -82,7 +82,7 @@
 - `rcu_register_thread()` ./util/rcu.c 注册这个线程到链表
 - `object_ref()` .qom/object.c，增加这个迁移对象的引用次数
 - `update_iteration_initial_status()` ./migration/migration.c，更新传入的`MigrationState` 状态，防止计算错误
-- `qemu_savevm_state_header()` ./migration/savevm.c，储存`QEMUFile` 头状态
+- `qemu_savevm_state_header()` ./migration/savevm.c，储存`QEMUFile` 头状态，挂载一些头信息
 - `qemu_savevm_start_setup()` ./migration/savevm.c，存储`QEMUFile` 头状态和项目状态
 - `migrate_set_state()` ./migration/migration.c，设置迁移状态
 - `migrate_is_active()` ./migration/migration.c，判断迁移对象是否还在存活，是迁移过程while循环的一部分

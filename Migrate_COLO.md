@@ -59,11 +59,11 @@
 **`hmp_migrate()`** 迁移部分
 
 - `qmp_migrate()` ./migration/migration.c
+  - 获取初始的`MigrationState`对象
 - `migrate_get_current()` ./migration/migration.c，确定 migrate 对象状态，并返回此对象
 - ​	`migrate_prepare()` ./migration/migration.c，做迁移前的准备工作，返回`true` 证明准备完成继续迁移，返回`false` 直接`return``
 - `socket_start_outgoing_migration()` ./migration/socket.c，用`TCP` 通讯，这里解析了socket参数，并进行函数调用
-
-  - `socket_start_outgoing_migration_internal()` ./migration/socket.c，这是内部函数，主要创建了`qio_channel` 对象，并进行连接
+- `socket_start_outgoing_migration_internal()` ./migration/socket.c，这是内部函数，主要创建了`qio_channel` 对象，并进行连接
     - `qio_channel_socket_connect_async()`
     - `exec_start_outgoing_migration()` ./migration/exec.c，用`shell` 通讯，最终会用`qio_channel` 维护通讯
     - `migration_channel_connect()` ./migration/channel.c
@@ -85,7 +85,9 @@
 - `qemu_savevm_state_header()` ./migration/savevm.c，储存`QEMUFile` 头状态，挂载一些头信息
 - `qemu_savevm_start_setup()` ./migration/savevm.c，存储`QEMUFile` 头状态和项目状态
 - `migrate_set_state()` ./migration/migration.c，设置迁移状态
+  - 由`MIGRATION_STATUS_SETUP`到`MIGRATION_STATUS_ACTIVE`
 - `migrate_is_active()` ./migration/migration.c，判断迁移对象是否还在存活，是迁移过程while循环的一部分
+  - 判断`MIGRATION_STATUS_ACTIVE`状态
 - `migration_iteration_run()` ./migration/migration.c，主要迭代工作的控制函数
   - `qemu_savevm_state_pending()` ./migration/savevm.c，循环遍历每一个发送条目，调用不同回调发送
     - `save_live_pending()`./include/migration/register.h，实际回调发送函数
@@ -93,11 +95,22 @@
     - `migration_maybe_pause()` ./migration/migration.c，申请停止源虚拟机
     - `qemu_savevm_state_complete_percopy()` ./migration/savevm.c 调用回调和错误处理
       - `sace_live_complete_percopy()` ./include/migration/register.h，实际回调函数
+    - `migrate_colo_enable()` ./migration/migration.c
+      - 这里会检查若未开启colo则设置状态`MIGRATION_STATUS_COMPLETED`
 - `migration_iteration_finish()` ./migration/migration.c，做一些清理工作
+  - 检车若即`MIGRATION_STATUS_ACTIVE`状态还不可以`migrate_colo_enable`会报错，因为上一步若不可以已经设置为`MIGRATION_STATUS_COMPLETED`
 -  `object_unref(OBJECT(s))` .qom/object.c，减少这个迁移对象的引用次数
 - `rcu_unregister_thread()`./util/rcu.c，解除注册这个线程到链表
 
-## 3. 函数细节
+## 3. COLO调用栈
+
+**`migraion_iteration_finish()`**
+
+- `migrate_start_colo_process()`
+
+
+
+## 4. 函数细节
 
 ` migrate_prepare()` ./migration/migration.c
 

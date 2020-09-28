@@ -98,15 +98,64 @@
     - `migrate_colo_enable()` ./migration/migration.c
       - 这里会检查若未开启colo则设置状态`MIGRATION_STATUS_COMPLETED`
 - `migration_iteration_finish()` ./migration/migration.c，做一些清理工作
-  - 检车若即`MIGRATION_STATUS_ACTIVE`状态还不可以`migrate_colo_enable`会报错，因为上一步若不可以已经设置为`MIGRATION_STATUS_COMPLETED`
+  - 检测若即`MIGRATION_STATUS_ACTIVE`状态还不可以`migrate_colo_enable`会报错，因为上一步若`migrate_colo_enable() False`已经设置为`MIGRATION_STATUS_COMPLETED`
 -  `object_unref(OBJECT(s))` .qom/object.c，减少这个迁移对象的引用次数
 - `rcu_unregister_thread()`./util/rcu.c，解除注册这个线程到链表
 
 ## 3. COLO调用栈
 
+### 1. 主节点
+
 **`migraion_iteration_finish()`**
 
-- `migrate_start_colo_process()`
+- `migrate_start_colo_process()` ./migration/colo.c 调用`colo`的函数
+  - `qemu_event_init()` ./util/qemu-thread-posix.c 初始化`colo_checkpoint_event`事件
+  - `time_new_ms()` ./include/qemu/timer.h 设置`colo_delay_timer` 和`check_point`回调函数`colo_checkpoint_notify`
+  - `migrate_set_state` ./migration/migration.c 设置从状态`MIGRATION_STATUS_ACTIVE`到`MIGRATION_STATUS_COLO`
+  - `colo_process_checkoutpoint()` ./migration/colo.h `checkout_point`工作函数
+
+**`colo_process_checkoutpoint()`**
+
+- `qemu_clock_get_ms` ./include/qemu/timer.h 获取当前时间
+- `get_colo_mode` ./migration/colo.c 获得colo状态，包括`COLO_MODE_PRIMARY`，`COLO_MODE_SECONDART`和`COLO_MODE_NONE`，这里提供一个信息，就是只有**主节点**才能进行`checkout_point`
+- `failover_init_state` ./migration/colo-failover.c 初始化`FAILOVER_STATUS_NONE`
+- `qemu_file_get_return_path` ./migration/qemu-file.c 得到输入参数文件
+- `colo_compara_register_notifier` ./net/colo-compare.c 注册收包比较器
+- `colo_receive_check_message` ./migration/colo.c 等待附属节点完成`VM`加载，并且进入`COLO`状态
+- `ifdef CONFIG_REPLACTION` ./replication.c 这个宏必须定义，作用未知，这个函数目前也不知道作用
+- `vm_start` ./softmmu/cpus.c 启动`VM`
+- `qemu_event_wait` ./qemu-thread-posix.c 等待`colo_checkoutpoint_event`事件的发生，这里可能会有其他线程改变`MIGRATION_STATUS`
+- `colo_do_checkpoint_transaction()` 实际执行`checkpoint`的函数，这个函数在一个while循环里，在执行之前还要确认`MIGRATION_STATUS_CLOL`状态
+
+**`colo_do_checkpoint_transaction()`**
+
+- `colo_send_message` ./migration/colo.c 发送`COLO_MESSAGE_CHECKPOINT_REQUEST`状态
+- `colo_receive_check_message` ./migration/colo.c 接受信息并且检查`COLO_MESSAGE_CHECKPOINT_REPLY`状态，至此为止，双方的状态应该都是等待`COLO`发生
+- `qio_channel_io_seek` ./io/channel.c 清空`channel-buffer`
+- `vm_stop_force_state` ./softmmu/cpus.c 强制转换状态为`RUN_STATE_COLO`
+- `colo_send_message` ./migration/colo.c 发送`COLO_MESSAGE_VNSTATE_SEND`状态
+- `qemu_save_device_state` ./migration/savevm.c 存储设备信息至buffer
+- `qemu_save_vm_live_State` ./migration/savevm.c 存储活动信息，
+  - **TODO: **可能需要增加一个超时断开机制，防止阻塞
+- `colo_send_message_value` ./migration/colo.c 得到`VMstate data size` 在附属节点的大小
+- `qemu_put_buffer` ./migration.qemu-file.c 将`QEMUFIle`转换为`char buffer`
+- `colo_receive_check_message` ./migration/colo.c 接受并检查`COLO_MESSAGE_VMSTATE_RECEIVED`状态
+- `colo_receive_check_message` ./mirgation/colo.c `COLO_MESSAGE_VMSTATE_LOADED` 附属节点load完成状态
+
+### 2.附属节点
+
+**`colo_process_incoming_thread`**
+
+- `colo_send_message` ./migration/colo.c 发送`COLO_MESSAGE_CHECKPOINT_READY`状态
+- `colo_wait_handle_message` ./migration/colo.c 接受并处理信息
+- `colo_incoming_process_checkpoint`./migration/colo.c 只有在接收到了`COLO_MESSAGE_CHECKPOINT_REQUEST`状态时进入，并发送`COLO_MESSAGE_CHECKPOINT_REPLY`状态
+- `colo_receive_check_message` ./migration/colo.c 等待`COLO_MESSAGE_VMSTATE_SEND`状态
+- **`cpu_synchronize_all_state`** ./siftmmu/cpus.c 同步cpu状态
+- **`qemu_load_vm_state_main`** ./migration/savevm.c  加载全部状态
+- `colo_recive_message_value` ./migration/colo.c 接收`COLO_MESSAGE_VMSTATE_SIZE`状态，并在后续发送实际值
+- `colo_send_message` ./migration/colo.c 发送附属节点状态
+- `qemu_load_device_state` ./migration/savevm.c 同步设备状态
+- `colo_send_message` ./migration/colo.c 发送`COLO_MESSAGE_VMSTATUS_LOADED`状态
 
 
 

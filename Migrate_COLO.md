@@ -211,7 +211,7 @@ struct AddressSpace {
     /* private: */
     struct rcu_head rcu;
     char *name;
-    MemoryRegion *root;
+    MemoryRegion *root; /* MemoryRegion 无向图的根节点 */
 
     /* Accessed via RCU.  */
     struct FlatView *current_map;
@@ -246,29 +246,31 @@ struct MemoryRegion {
     bool global_locking;
     uint8_t dirty_log_mask;
     bool is_iommu;
-    RAMBlock *ram_block;
+    RAMBlock *ram_block; /* 实际分配的物理内存 */
     Object *owner;
 
-    const MemoryRegionOps *ops;
+    const MemoryRegionOps *ops; /* 封装了一组回调函数，在对此结构体进行操作的时候会用到 */
     void *opaque;
-    MemoryRegion *container;
+    MemoryRegion *container; /* 此节点的上一级 */
     Int128 size;
-    hwaddr addr;
+    hwaddr addr; /* 虚拟机中的物理地址 */
     void (*destructor)(MemoryRegion *mr);
-    uint64_t align;
-    bool terminates;
+    uint64_t align; /* 对齐作用 */
+    bool terminates; /* 是否是叶子节点 */
     bool ram_device;
     bool enabled;
     bool warning_printed; /* For reservations */
     uint8_t vga_logging_count;
     MemoryRegion *alias;
     hwaddr alias_offset;
-    int32_t priority;
-    QTAILQ_HEAD(, MemoryRegion) subregions;
-    QTAILQ_ENTRY(MemoryRegion) subregions_link;
+    int32_t priority; /* 优先级，在多个对象地址重复时，谁的大谁就会被虚拟机可见 */
+    QTAILQ_HEAD(, MemoryRegion) subregions; /* 子节点 */
+    QTAILQ_ENTRY(MemoryRegion) subregions_link; /* 兄弟节点 */
     QTAILQ_HEAD(, CoalescedMemoryRange) coalesced;
     const char *name;
     unsigned ioeventfd_nb;
     MemoryRegionIoeventfd *ioeventfds;
     };
 ```
+
+- 整个内存的模拟通过`MemoryRegion`构成的无环图完成，图的**叶子**结点是**实际**分配给**虚拟机**的**物理内存**或者**MMIO**，**中间**节点表示**内存总线**，其他不关联`AddressSpace`的`MemoryRegion`是**内存控制器**

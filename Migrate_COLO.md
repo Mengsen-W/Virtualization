@@ -46,22 +46,26 @@
 - 初始化迁移传入对象，无论是否使用。
 
 2.`blk_mig_init()`
+
 - 初始化块设备迁移，包括块设备状态的初始化，块设备迁移列表初始化，和锁的初始化
 
 3.`ram_mig_init()`
--`XBZRLE` 算法锁的初始化
+
+- `XBZRLE` 算法锁的初始化
 
 4.`dirty_bitmap_mig_init()`
 - 脏内存页面标记初始化
 
 ## 2. Migrate调用栈
 
+### 1. 主节点
+
 **`hmp_migrate()`** 迁移部分
 
 - `qmp_migrate()` ./migration/migration.c
   - 获取初始的`MigrationState`对象
 - `migrate_get_current()` ./migration/migration.c，确定 migrate 对象状态，并返回此对象
-- ​	`migrate_prepare()` ./migration/migration.c，做迁移前的准备工作，返回`true` 证明准备完成继续迁移，返回`false` 直接`return``
+- `migrate_prepare()` ./migration/migration.c，做迁移前的准备工作，返回`true` 证明准备完成继续迁移，返回`false` 直接`return``
 - `socket_start_outgoing_migration()` ./migration/socket.c，用`TCP` 通讯，这里解析了socket参数，并进行函数调用
 - `socket_start_outgoing_migration_internal()` ./migration/socket.c，这是内部函数，主要创建了`qio_channel` 对象，并进行连接
     - `qio_channel_socket_connect_async()`
@@ -102,17 +106,37 @@
 -  `object_unref(OBJECT(s))` .qom/object.c，减少这个迁移对象的引用次数
 - `rcu_unregister_thread()`./util/rcu.c，解除注册这个线程到链表
 
+### 2. 从节点
+
+**`hmp_migrate_incoming`**
+
+- `qmp_migrate_incoming` ./migration/migration.c
+  - `qemu_start_incoming_migration` ./migration/migration/c 设置从节点状态`MIGRATION_STATUS_SETUP`
+  - `xx_steart_incoming_migration` ./migration/socket.c 设置状态和初始化监听程序
+    - `qio_net_listener_set_name` ./io/net-listener.c 设置监听状态，设置回调函数
+    - `migration_channel_process_incoming` ./migration/channel.c 创建新`migration incoming`对象，设置回调函数
+
+**`migration_ioc_process_incoming`** 主工作函数
+
+- `migration_incoming_setup` ./migration/migration.c 设置`incoming`状态
+- `migration_incoming_process` ./migration/migration.c 创建`Coroutine`对象，注册`process_incoming_migration_c`函数
+  - `process_incoming_migration_co` ./migration/migration.c 协程回调函数，设置状态为`MIGRATION_STATUS_ACTIVE`,注册`colo_process_incoming_thread`线程
+    - `trace_process_incoming_migration_co_postcopy_end_main` **这个协程在哪没找到**
+    - `qemu_loadvm_state` ./migration/savevm.c 加载`vm`状态
+    - `migration_incoming_colo_enabled` ./migration/migration.c 判断是否需要`COLO`
+    - `qemu_bh_schedule` ./util/async.c 添加回调到调度器
+
 ## 3. COLO调用栈
 
 ### 1. 主节点
 
 **`migraion_iteration_finish()`**
 
-- `migrate_start_colo_process()` ./migration/colo.c 调用`colo`的函数
-  - `qemu_event_init()` ./util/qemu-thread-posix.c 初始化`colo_checkpoint_event`事件
-  - `time_new_ms()` ./include/qemu/timer.h 设置`colo_delay_timer` 和`check_point`回调函数`colo_checkpoint_notify`
+- `migrate_start_colo_process` ./migration/colo.c 调用`colo`的函数
+  - `qemu_event_init` ./util/qemu-thread-posix.c 初始化`colo_checkpoint_event`事件
+  - `time_new_ms` ./include/qemu/timer.h 设置`colo_delay_timer` 和`check_point`回调函数`colo_checkpoint_notify`
   - `migrate_set_state` ./migration/migration.c 设置从状态`MIGRATION_STATUS_ACTIVE`到`MIGRATION_STATUS_COLO`
-  - `colo_process_checkoutpoint()` ./migration/colo.h `checkout_point`工作函数
+  - `colo_process_checkoutpoint` ./migration/colo.h `checkout_point`工作函数
 
 **`colo_process_checkoutpoint()`**
 
@@ -125,7 +149,7 @@
 - `ifdef CONFIG_REPLACTION` ./replication.c 这个宏必须定义，作用未知，这个函数目前也不知道作用
 - `vm_start` ./softmmu/cpus.c 启动`VM`
 - `qemu_event_wait` ./qemu-thread-posix.c 等待`colo_checkoutpoint_event`事件的发生，这里可能会有其他线程改变`MIGRATION_STATUS`
-- `colo_do_checkpoint_transaction()` 实际执行`checkpoint`的函数，这个函数在一个while循环里，在执行之前还要确认`MIGRATION_STATUS_CLOL`状态
+- `colo_do_checkpoint_transaction` 实际执行`checkpoint`的函数，这个函数在一个while循环里，在执行之前还要确认`MIGRATION_STATUS_CLOL`状态
 
 **`colo_do_checkpoint_transaction()`**
 
@@ -142,7 +166,7 @@
 - `colo_receive_check_message` ./migration/colo.c 接受并检查`COLO_MESSAGE_VMSTATE_RECEIVED`状态
 - `colo_receive_check_message` ./mirgation/colo.c `COLO_MESSAGE_VMSTATE_LOADED` 附属节点load完成状态
 
-### 2.附属节点
+### 2.从节点
 
 **`colo_process_incoming_thread`**
 

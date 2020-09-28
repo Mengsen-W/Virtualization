@@ -106,7 +106,7 @@
 -  `object_unref(OBJECT(s))` .qom/object.c，减少这个迁移对象的引用次数
 - `rcu_unregister_thread()`./util/rcu.c，解除注册这个线程到链表
 
-### 2. 从节点
+### 2. 从节点g
 
 **`hmp_migrate_incoming`**
 
@@ -197,3 +197,78 @@
 `migrate_thread()` ./migration/migration.c
 
 `migration_iteration_run()` ./migration/migration.c 迭代的关键逻辑
+
+## 5. 结构体细节
+
+1. ### 内存相关
+
+```c
+/**
+ * AddressSpace: describes a mapping of addresses to #MemoryRegion objects
+ * 描述MMIO和 #MemoryRegion 之间的映射
+ */
+struct AddressSpace {
+    /* private: */
+    struct rcu_head rcu;
+    char *name;
+    MemoryRegion *root;
+
+    /* Accessed via RCU.  */
+    struct FlatView *current_map;
+
+    int ioeventfd_nb;
+    struct MemoryRegionIoeventfd *ioeventfds;
+    QTAILQ_HEAD(, MemoryListener) listeners;
+    QTAILQ_ENTRY(AddressSpace) address_spaces_link;
+};
+```
+- 表示虚拟机能够访问的所有地址
+- 和`MemoryRegion *root`对应
+
+```c
+/** MemoryRegion:
+ *
+ * A struct representing a memory region.
+ */
+struct MemoryRegion {
+    Object parent_obj;
+
+    /* private: */
+
+    /* The following fields should fit in a cache line */
+    bool romd_mode;
+    bool ram;
+    bool subpage;
+    bool readonly; /* For RAM regions */
+    bool nonvolatile;
+    bool rom_device;
+    bool flush_coalesced_mmio;
+    bool global_locking;
+    uint8_t dirty_log_mask;
+    bool is_iommu;
+    RAMBlock *ram_block;
+    Object *owner;
+
+    const MemoryRegionOps *ops;
+    void *opaque;
+    MemoryRegion *container;
+    Int128 size;
+    hwaddr addr;
+    void (*destructor)(MemoryRegion *mr);
+    uint64_t align;
+    bool terminates;
+    bool ram_device;
+    bool enabled;
+    bool warning_printed; /* For reservations */
+    uint8_t vga_logging_count;
+    MemoryRegion *alias;
+    hwaddr alias_offset;
+    int32_t priority;
+    QTAILQ_HEAD(, MemoryRegion) subregions;
+    QTAILQ_ENTRY(MemoryRegion) subregions_link;
+    QTAILQ_HEAD(, CoalescedMemoryRange) coalesced;
+    const char *name;
+    unsigned ioeventfd_nb;
+    MemoryRegionIoeventfd *ioeventfds;
+    };
+```

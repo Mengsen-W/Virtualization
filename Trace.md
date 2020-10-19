@@ -143,23 +143,32 @@
        
        ```
 
-    5. 生成log
+    5. qmp命令
 
+       ```json
+       {'execute': 'trace-event-set-state', 'arguments': {'name': 'colo_checkpoint_user_log', 'enable': true} }
+       {'execute': 'human-monitor-command', 'arguments': {'command-line': 'logfile /home/data/mengsen/log/test.log'}}
        ```
+       
+       
+    
+6. 生成log
+   
+   ```
        15868@1602750016.645000:migrate_set_state_user new state setup
-       17234@1602750016.646237:migrate_set_state_user new state active
+   17234@1602750016.646237:migrate_set_state_user new state active
        17716@1602750016.650037:migrate_set_state_user new state active
-       17716@1602750021.080884:migrate_set_state_user new state completed
+   17716@1602750021.080884:migrate_set_state_user new state completed
        17234@1602750021.247924:migrate_set_state_user new state completed
-       ```
-
-    6. 一些细节
-
+   ```
+   
+    7. 一些细节
+   
        1. 当觉得某项`trace-event`可以再前面增加`disable`，表示取消此项`trace-event`，具体语法如下
-
+   
           `[disable] <name>(<type1> <arg1>[, <type2> <arg2>] ...) "<format-string>"`
-
-    7. 一些教程
-
+   
+    8. 一些教程
+   
        1. https://github.com/qemu/qemu/blob/master/docs/devel/tracing.txt
        2. https://github.com/qemu/qemu/blob/master/trace-events

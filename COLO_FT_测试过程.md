@@ -93,6 +93,7 @@ primary_ip = localhost
 {'execute': 'x-blockdev-change', 'arguments':{'parent': 'colo-disk0', 'node': 'replication0' } }
 {'execute': 'migrate-set-capabilities', 'arguments': {'capabilities': [ {'capability': 'x-colo', 'state': true } ] } }
 {'execute': 'migrate', 'arguments': {'uri': 'tcp:127.0.0.2:9998' } }
+
 ```
 
 ## 5. 开启追踪时间设置输出文件

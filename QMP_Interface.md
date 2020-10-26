@@ -18,7 +18,13 @@
    3. `qemu`推荐在定义`qmp`接口的同时，将`hmp`接口也一同定义
    4. 在`./qapi/aqpi-types-XXX.h`会定义`struct json`，在`./qapi-command-XXX.h`会定义`command json`
 
-3. ## 测试结果
+3. ## 出错处理
+
+   1. 在有返回值得情况下返回栈内单独创建的对象，若想**返回`NULL`**则一定要**报错**。否则`qapi-visit-core.c:47`会因为`assert`而`Abort`
+   2. 如果结构体内嵌结构体，则内嵌的结构体也要`g_malloc0()`构造出来，否则`qapi-visit-core.c:47`会因为`assert`而`Abort`
+   3. 由上述两条可以得出结论，不需要手动析构一个在栈上创建的局部指针变量。因为返回指针出去后，`qemu`会自动析构包括内在结构体在内的全部堆区内存。
+
+4. ## 测试结果
 
    1. ```json
       # 开启QMP

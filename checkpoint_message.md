@@ -293,4 +293,16 @@
        {"return": {"tot_time": 13715646658, "wait_time": 8342171814, "init_time": 129270482, "stat_time": 0, "dev_size": 0, "dev_time": 931910, "vmstate_time": 23924, "ram_size": 23552, "avg_time": 721876139, "tot_num": 19, "ram_time": 108490503, "info": {"expected-downtime": 2760, "status": "colo", "setup-time": 38, "total-time": 175604, "ram": {"total": 2165121024, "postcopy-requests": 0, "dirty-sync-count": 22, "multifd-bytes": 0, "pages-per-second": 621, "page-size": 4096, "remaining": 0, "mbps": 20.513435, "transferred": 2328786212, "duplicate": 562646, "dirty-pages-rate": 1464, "skipped": 0, "normal-bytes": 2319192064, "normal": 566209}}}}
        ```
        
+       ```
+       {"return": {"tot_time": 12779748893, "wait_time": 10558913369, "init_time": 154064109, "stat_time": 0, "dev_size": 23552, "dev_time": 988685, "vmstate_time": 26201, "ram_size": 0, "avg_time": 851983259, "tot_num": 15, "ram_time": 165391355, "info": {"expected-downtime": 20, "status": "colo", "setup-time": 41, "total-time": 178237, "ram": {"total": 2165121024, "postcopy-requests": 0, "dirty-sync-count": 18, "multifd-bytes": 0, "pages-per-second": 8211, "page-size": 4096, "remaining": 0, "mbps": 242.355961, "transferred": 2469824640, "duplicate": 564065, "dirty-pages-rate": 834, "skipped": 0, "normal-bytes": 2459942912, "normal": 600572}}}}
        
+       ```
+       
+       ```
+       {"return": {"tot_time": 6967869903, "wait_time": 18822635604, "init_time": 146788722, "stat_time": 0, "dev_size": 23552, "dev_time": 1021652, "vmstate_time": 671976529, "ram_size": 0, "avg_time": 1161311650, "tot_num": 6, "ram_time": 348230530, "info": {"expected-downtime": 333, "status": "colo", "setup-time": 42, "total-time": 269723, "ram": {"total": 2165121024, "postcopy-requests": 0, "dirty-sync-count": 19, "multifd-bytes": 0, "pages-per-second": 259720, "page-size": 4096, "remaining": 0, "mbps": 8143.17984, "transferred": 3964700842, "duplicate": 580735, "dirty-pages-rate": 4215, "skipped": 0, "normal-bytes": 3951755264, "normal": 964784}}}}
+       
+       ```
+       
+       
+
+  

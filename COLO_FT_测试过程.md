@@ -89,11 +89,11 @@ primary_ip = localhost
 
 // primary
 {'execute':'qmp_capabilities'}
-{'execute': 'human-monitor-command', 'arguments': {'command-line': 'drive_add -n buddy driver=replication,mode=primary,file.driver=nbd,file.host=127.0.0.2,file.port=9999,file.export=parent0,node-name=replication0'}}
+// 对端ip
+{'execute': 'human-monitor-command', 'arguments': {'command-line': 'drive_add -n buddy driver=replication,mode=primary,file.driver=nbd,file.host=20.21.22.71,file.port=9999,file.export=parent0,node-name=replication0'}}
 {'execute': 'x-blockdev-change', 'arguments':{'parent': 'colo-disk0', 'node': 'replication0' } }
 {'execute': 'migrate-set-capabilities', 'arguments': {'capabilities': [ {'capability': 'x-colo', 'state': true } ] } }
-{'execute': 'migrate', 'arguments': {'uri': 'tcp:127.0.0.2:9998' } }
-
+{'execute': 'migrate', 'arguments': {'uri': 'tcp:20.21.22.71:9998' } }
 ```
 
 ## 5. 开启追踪时间设置输出文件
@@ -103,8 +103,9 @@ primary_ip = localhost
 {'execute': 'human-monitor-command', 'arguments': {'command-line': 'logfile /home/data/mengsen/log/test_SVM.log'}}
 // 这条命令是QMP提供的
 {'execute': 'trace-event-set-state', 'arguments': {'name': 'colo_send_message', 'enable': true} }
+{'execute': 'trace-event-set-state', 'arguments': {'name': 'colo_send_message', 'enable': true} }
 {'execute': 'trace-event-set-state', 'arguments': {'name': 'colo_vm_state_change', 'enable': true} }
-{'execute': 'trace-event-set-state', 'arguments': {'name': 'colo_receive_message', 'enable': true} }
+{'execute': 'trace-event-set-state', 'arguments': {'name': 'VM_state', 'enable': false} }
 {'execute': 'trace-event-set-state', 'arguments': {'name': 'colo_checkpoint_user_log_secondary', 'enable': true} }
 ```
 

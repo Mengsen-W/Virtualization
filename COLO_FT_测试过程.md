@@ -113,6 +113,8 @@ primary_ip = localhost
 
 ```json
 {'execute': 'human-monitor-command', 'arguments': {'command-line': 'change vnc 0.0.0.0:1'}}
+{'execute': 'human-monitor-command', 'arguments': {'command-line': 'change vnc 0.0.0.0:1'}}
+human-monitor-command command-line='change vnc 0.0.0.0:1'
 ```
 
 ## 7. 一些QMP常用命令
@@ -128,10 +130,21 @@ primary_ip = localhost
 ## 8. 一些结论
 
 1. 对于这两个模拟的设备在同一主机上，网络延迟几乎可以忽略
+
 2. 越是模拟高性能设备（可能和`ram`大小以及`cpu cache` 大小有关），同步时间越长
+
 3. 观察log文件得出大概每17秒需要同步一次，一次同步时间大概3秒
+
 4. `colo_do_checkpoint_transaction`这个函数在`while`中一直运行，退出的时候也不清理，利用`qemu_sem_wait`进行时间控制，直到结束才会清理
+
 5. 对于`colo_incoming_process_checkpoint`能看到他走到函数末端，然后进入等待直到收到`CHECKPOINT_REQUES`消息唤醒
+
+6. ```
+   firewall-cmd --query-port=xxx/tcp => no
+   firewall-cmd --add-port=xxx/tcp => success
+   ```
+
+   
 
 ## 9. 未来计划
 

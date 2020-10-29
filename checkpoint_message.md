@@ -5,81 +5,25 @@
 1. 在`./qapi/migration.json`中增加结构体对象和命令
 
    ```json
-   ##
-   # @checkpoint_recorder:
-   #
-   # Used to get checkpoint average time, total time, total number,
-   # amount of data transmitted
-   #
-   # @avg_time: average time of every checkpoint
-   #
-   # @tot_time: total time of all checkpoint
-   #
-   # @init_time: init process time
-   #
-   # @tot_num: total number of checkpoint times
-   #
-   # @dev_time: device migrate average time
-   #
-   # @ram_time: ram migrate average time
-   #
-   # @stat_time: VM state average time
-   #
-   # @dev_size: device migrate bytes size
-   #
-   # @ram_size: ram migrate bytes size
-   #
-   # @info: MigrationInfo
-   #
-   # Since: 5.0.0
-   ##
    { 'struct': 'checkpoint_recorder',
-      'data': { 'avg_time': 'int64', 'tot_time': 'int64', 'init_time': 'int64',
-               'tot_num': 'int64', 'dev_time': 'int64', 'stat_time': 'int64',
-               'ram_time': 'int64', 'dev_size': 'int64', 'ram_size': 'int64',
-               'info': 'MigrationInfo' } }
-   { 'struct': 'checkpoint_recorder',
-       'data': { 'tot_time': 'int64', 'tot_num': 'int64', 'init_time': 'int64',
-               'wait_time': 'int64', 'avg_time': 'int64',
-               'vmstate_time': 'int64', 'stat_time': 'int64',
-               'ram_time': 'int64', 'dev_time': 'int64',
-               'dev_size': 'int64', 'ram_size': 'int64',
-               'info': 'MigrationInfo' } }
-   
+      'data': { 'tot_time': 'int64', 'tot_num': 'int64',
+                'init_time': 'int64', 'wait_time': 'int64',
+                'avg_time': 'int64', 'stat_time': 'int64',
+                'dev_time': 'int64', 'ram_time': 'int64',
+                'put_time': 'int64', 'load_time': 'int64',
+                'resume_time': 'int64',
+                'dev_size': 'int64', 'ram_size': 'int64',
+                'info': 'MigrationInfo' } }
    ```
-
+   
    ```json
-   ##
-   # @info_checkpoint:
-   #
-   # Return information about checkpoint_recorder
-   #
-   # Returns: @checkpoint_recorder
-   #
-   # Since: 5.0.0
-   #
-   # Example:
-   #
-   # -> { "execute": "info_checkpoint" }
-   #	 { "execute": "reset_checkpoint" }
-   # <- { "return": {
-   #         "tot_time": "123456",
-   #		  "tot_num": "123456",
-   #         "init_time": "123456",
-   #    	  "wait_time": "123456",
-   #         "avg_time": "123456",
-   #         "dev_time": "123456",
-   #         "ram_time": "123456",
-   #		  "vmstate_time": 123456,
-   #         "dev_size": "123456789",
-   #         "ram_size": "123456789"
-   #         "info": "MigrationInfo"
-   #      }
-   #    }
-   ##
+   # { "execute": "info_checkpoint" }
+   # { "execute": "reset_checkpoint" }
+   
+   { 'command': 'reset_checkpoint' }
    { 'command': 'info_checkpoint', 'returns': 'checkpoint_recorder' }
    ```
-
+   
 2. **<u>注意这里复用一部分`MigrationInfo`的代码，用来记录`COLO`过程迁移内存大小（后续可能会继续调整），而且目前应该先不会使用这部分代码，计划先把`get_clock()`记录时间调通过，再修改这部分。</u>**
 
 ## 修改`migration.c`源码
@@ -88,23 +32,25 @@
 
    ```c
    checkpoint_recorder *qmp_info_checkpoint(Error **errp);
+   struct MigrationInfo;
    
    //../qapi/qapi-types-migration.h
    struct checkpoint_recorder {
-       int64_t tot_time; 		// 全生命周期的总时间
-       int64_t tot_num;  		// 总次数
-       int64_t init_time; 		// 初始化变量时间
-       int64_t wait_time; 		// 主机每次checkpoint等待时间
-       int64_t avg_time; 		// 每次进入的平均时间
-       int64_t dev_time; 		// 传输设备时间
-       int64_t stat_time; 		// 改变状态时间
-       int64_t ram_time; 		// 传输ram时间
-       int64_t vmstate_time; 	// 改变状态时间
-       int64_t dev_size; 		// 传输设备内存大小
-       int64_t ram_size; 		// 传输ram大小
-       MigrationInfo *info; 	// Migration信息
+       int64_t tot_time;
+       int64_t tot_num;
+       int64_t init_time;
+       int64_t wait_time;
+       int64_t avg_time;
+       int64_t stat_time;
+       int64_t dev_time;
+       int64_t ram_time;
+       int64_t put_time;
+       int64_t load_time;
+       int64_t resume_time;
+       int64_t dev_size;
+       int64_t ram_size;
+       MigrationInfo *info;
    };
-   
    void qapi_free_checkpoint_recorder(checkpoint_recorder *obj);
    void qapi_free_MigrationInfo(MigrationInfo *obj);
    ```
@@ -189,7 +135,7 @@
    **/
    static void fill_checkpoint_recorder(checkpoint_recorder *cr){
        cr->tot_time = g_cr->tot_time;
-      	cr->tot_num = g_cr->tot_num;
+       cr->tot_num = g_cr->tot_num;
        cr->init_time = g_cr->init_time;
        
        cr->wait_time = g_cr->wait_time / cr->tot_num;
@@ -227,8 +173,6 @@
    
    ```
 
-   、、
-
 ## 修改`colo.c`源码
 
 1. 声明全局变量
@@ -239,70 +183,223 @@
 
 2. 一些添加位置
 
-   1. `init_time`
+   1. 主节点流程图
 
-      - 主节点添加在`migrate_start_colo_process()`函数开始，结束在进入`colo`的`while`循环之前
-      - 从节点添加在`colo_process_incoming_thread()`函数开始处，结束在进入`colo`的`while`循环之前
+      ```c
+      migrate_start_colo_process(){
+          g_cr->init_time = get_clock();	// init_time 开始点
+      	colo_process_checkpot();
+      		g_cr->init_time = g_cr->init_time - get_clock(); // init_time 结束点
+      		while() {
+      			temp_begin = get_clock();	// wait_time 开始点
+      			qemu_sem_wait();
+      			temp_end = get_clock();		// wait_time 结束点
+      			
+      			g_cr->wait_time += temp_end - temp_begin;
+      			
+      			temp_begin = get_clock();	// tot_time 开始点
+      			colo_do_checkpoint_transaction();
+      			temp_end = get_clock();		// tot_time 结束点
+      			
+      			g_cr->tot_time += temp_end - temp_begin;
+      			++g_cr->tot_num;			// 总次数加1
+      		}
+      }
+      colo_do_checkpoint_transcaction(){
+          temp_begin = get_clock(); // stat_time 开始点
+          send_message(REQUEST);
+          receive_message(REPLY);
+          reset_buffer();
+          change_state("run", "stop");
+          nofity_compare_event();
+          set_block_enable();
+          maybe_replication_do_checkpoint();
+          colo_send_message(VMSTATE_SEND);
+          temp_end = get_clock();		// stat_time 结束点
+          g_cr->stat_time += temp_end - temp_begin;
+      
+          temp_begin = get_clock(); 	// device_time 开始点
+          qemu_save_device_state();
+          temp_end = get_clock();		// device_time 结束点
+          g_cr->stat_time += temp_end - temp_begin;
+      
+          temp_begin_time = get_clock();	// ram_time 开始点
+          qemu_savevm_live_state(s->to_dst_file);
+          qemu_fflush(fb);
+          temp_end_time = get_clock();	// ram_time 结束点
+          g_cr->ram_time += temp_end_time - temp_begin_time;
+      
+          temp_begin = get_clock();		// put_time 开始点
+          colo_send_message_value(s->to_dst_file, COLO_MESSAGE_VMSTATE_SIZE,
+                                  bioc->usage, &local_err);
+          qemu_put_buffer(s->to_dst_file, bioc->data, bioc->usage);
+          qemu_fflush(s->to_dst_file);
+          temp_end = get_clock();	// put_time 结束点
+          g_cr->put_time += temp_end - temp_begin;
+      
+          temp_begin = get_clock();		// recv_time 开始点
+          colo_receive_check_message(s->rp_state.from_dst_file,
+                                     COLO_MESSAGE_VMSTATE_RECEIVED, &local_err);
+          temp_end = get_clock();	// recv_time 结束点
+          g_cr->put_time += temp_end - temp_begin;
+      
+          temp_begin = get_clock();		// load_time 开始点
+          colo_receive_check_message(s->rp_state.from_dst_file,
+                                     COLO_MESSAGE_VMSTATE_LOADED, &local_err);
+          temp_end = get_clock();			// load_time 结束点
+          g_cr->load_time += temp_end - temp_begin;
+      
+          temp_begin = get_clock();		// resume_time 开始点
+          qemu_mutex_lock_iothread();
+          vm_start();
+          qemu_mutex_unlock_iothread();
+          trace_colo_vm_state_change("stop", "run");
+          temp_end = get_clock();			// resume_time 结束点
+          g_cr->resume_time += temp_end - temp_begin;
+      }
+      
+      ```
 
-   2. `tot_num`
+   2. 从节点流程图
 
-      - 添加在每个`while`的尾部部，意思是进行了一次`checkpoint`
+      ```c
+      colo_process_incoming_thread(){
+      	g_cr->init_time = get_clock();
+      	g_cr->init_time = g_cr->init_time - get_clock();
+      	while(){
+      		colo_wait_handle_message()
+      	}
+      }
+      colo_wait_handle_message(){
+          temp_begin = get_clock();	// wait_time 开始点
+          receive_msg(REQUEST);
+          temp_end = get_clock();		// wait_time 结束点
+          g_cr->wait_time += temp_end - temp_begin();
+          temp_begin = get_clock();	// tot_time 开始点
+          colo_incoming_process_checkpoint();
+          temp_end = get_clock();		// tot_time 结束点
+          g_cr->tot_time += temp_end - temp_begin;
+          ++g_cr->tot_num;	// 增加总次数
+      }
+      
+      colo_incoming_process_checkpoint(){
+          temp_begin = get_clock(); // stat_time 开始点
+          send(REPLAY)
+          receive(VMSTATE);
+          temp_end = get_clock();	// stat_time 结束点
+          g_cr->stat_time += temp_begin - temp_end;
+          
+          temp_begin_time = get_clock();	// ram_time 开始点
+          qemu_mutex_lock_iothread();
+          cpu_synchronize_all_pre_loadvm();
+          ret = qemu_loadvm_state_main(mis->from_src_file, mis);
+          qemu_mutex_unlock_iothread();
+          temp_end_time = get_clock();	// ram_time 结束点
+          g_cr->ram_time += temp_end_time - temp_begin_time;
+          
+          temp_begin_time = get_clock();	// put_time 开始点
+          value = colo_receive_message_value(mis->from_src_file,
+                                   COLO_MESSAGE_VMSTATE_SIZE, &local_err);
+          if (value > bioc->capacity) {
+              bioc->capacity = value;
+              bioc->data = g_realloc(bioc->data, bioc->capacity);
+          }
+          total_size = qemu_get_buffer(mis->from_src_file, bioc->data, value);
+          temp_end_time = get_clock();	// put_time 结束点
+          g_cr->put_time += temp_end_time - temp_begin_time;
+          
+          temp_begin_time = get_clock();	// recv_time 开始点
+          colo_send_message(mis->to_src_file, COLO_MESSAGE_VMSTATE_RECEIVED,
+                       &local_err);
+          temp_end_time = get_clock();	// recv_time 结束点
+          g_cr->recv_time += temp_end_time - temp_begin_time;
+      
+          temp_begin_time = get_clock();	// load_time 开始点
+          qemu_mutex_lock_iothread();
+          vmstate_loading = true;
+          ret = qemu_load_device_state();
+          vmstate_loading = false;
+          vm_start();
+          qemu_mutex_unlock_iothread();
+      
+          if (failover_get_state() == FAILOVER_STATUS_RELAUNCH) {
+              failover_set_state(FAILOVER_STATUS_RELAUNCH,
+                              FAILOVER_STATUS_NONE);
+              failover_request_active(NULL);
+              return;
+          }
+      
+          colo_send_message(mis->to_src_file, COLO_MESSAGE_VMSTATE_LOADED,
+                       &local_err);
+          temp_end_time = get_clock();	// load_time 结束点
+          g_cr->load_time += temp_end_time - temp_begin_time;
+      
+      }
+      	
+      ```
 
-   3. `tot_time`
+      
 
-      - 在放在`while`的首尾分别记录时间点，然后在每次`checkpoint`结束后，这个时间点在最后，统计时间点的差值并累加
+   ## 测试结果（不要启动就开始测试）
 
-   4. `wait_time`
+1核2G 编译内核
 
-      - 统计主节点每次`sem_wait`的时间
-      - 从节点在`colo_wait_handle_message()`测试接受数据是否是阻塞接受的
+```json
+{"return": {"tot_time": 4295509854, "wait_time": 17651743242, "init_time": 140781582, "put_time": 26804, "stat_time": 31396893, "resume_time": 251641, "load_time": 597324359, "dev_size": 16919, "dev_time": 595551, "ram_size": 0, "avg_time": 715918309, "recv_time": 1947, "tot_num": 6, "ram_time": 86318844, "info": {"expected-downtime": 1277, "status": "colo", "setup-time": 42, "total-time": 334026, "ram": {"total": 2165121024, "postcopy-requests": 0, "dirty-sync-count": 36, "multifd-bytes": 0, "pages-per-second": 1760, "page-size": 4096, "remaining": 0, "mbps": 53.822902, "transferred": 1677952185, "duplicate": 553349, "dirty-pages-rate": 208, "skipped": 0, "normal-bytes": 1669709824, "normal": 407644}}}}
 
-   5. `avg_time`
+```
 
-      - 采用懒加载每次调用`qmp`接口时，在`fill_checkpoint`计算统计这个量
+2核2G 编译内核
 
-   6. `dev_time`
+```json
+{"return": {"tot_time": 4851209013, "wait_time": 16078759529, "init_time": 139707848, "put_time": 28805, "stat_time": 45556566, "resume_time": 296554, "load_time": 607641014, "dev_size": 19130, "dev_time": 704995, "ram_size": 0, "avg_time": 808534835, "recv_time": 2245, "tot_num": 6, "ram_time": 154303144, "info": {"expected-downtime": 160, "status": "colo", "setup-time": 41, "total-time": 257755, "ram": {"total": 2165121024, "postcopy-requests": 0, "dirty-sync-count": 35, "multifd-bytes": 0, "pages-per-second": 290100, "page-size": 4096, "remaining": 0, "mbps": 9172.72136, "transferred": 1458167517, "duplicate": 554359, "dirty-pages-rate": 2218, "skipped": 0, "normal-bytes": 1450344448, "normal": 354088}}}}
 
-      - 主节点在`qemu_save_device_state()`函数上下加点
-      - 从节点在`qemu_load_device_state`函数上下加点
+```
 
-   7. `ram_time`
+4核2G 编译内核
 
-      - 主节点在`qemu_savevm_live_state*()`函数上下加点
-      - 从节点在`cpu_synchronize_all_pre_loadvm()`和`qemu_loadvm_state_main()`上下加点
+```json
+{"return": {"tot_time": 5088784800, "wait_time": 18981378149, "init_time": 153395374, "put_time": 27636, "stat_time": 25471275, "resume_time": 513525, "load_time": 678927630, "dev_size": 23552, "dev_time": 759800, "ram_size": 0, "avg_time": 1017756960, "recv_time": 2538, "tot_num": 5, "ram_time": 312054565, "info": {"expected-downtime": 316, "status": "colo", "setup-time": 41, "total-time": 562359, "ram": {"total": 2165121024, "postcopy-requests": 0, "dirty-sync-count": 48, "multifd-bytes": 0, "pages-per-second": 291670, "page-size": 4096, "remaining": 0, "mbps": 9351.04824, "transferred": 3892962593, "duplicate": 580622, "dirty-pages-rate": 4528, "skipped": 0, "normal-bytes": 3880157184, "normal": 947304}}}}
 
-   8. `vmstate_time`
+```
 
-      - 主节点在`qemu_put_buffer()`函数上下加点
-      - 从节点在`colo_receive_message()`函数上下加点
+8核2G 编译内核
 
-   9. `ram_size`
+```json
+{"return": {"tot_time": 15926515359, "wait_time": 18735688737, "init_time": 137946849, "put_time": 40874, "stat_time": 70852667, "resume_time": 945973, "load_time": 774318843, "dev_size": 32396, "dev_time": 1293836, "ram_size": 0, "avg_time": 1327209613, "recv_time": 2315, "tot_num": 12, "ram_time": 479752230, "info": {"expected-downtime": 652, "status": "colo", "setup-time": 41, "total-time": 332218, "ram": {"total": 2165121024, "postcopy-requests": 0, "dirty-sync-count": 29, "multifd-bytes": 0, "pages-per-second": 265740, "page-size": 4096, "remaining": 0, "mbps": 8485.30008, "transferred": 6897523672, "duplicate": 606899, "dirty-pages-rate": 8314, "skipped": 0, "normal-bytes": 6878625792, "normal": 1679352}}}}
+```
 
-      - 主节点在统计`bioc->usage`
-      - 从节点统计`total_size`，这个长度由主节点发送而来
+16核2G 编译内核
 
-   10. 测试结果
+```
+{"return": {"tot_time": 16775957311, "wait_time": 18293712245, "init_time": 122877963, "put_time": 35059, "stat_time": 101646924, "resume_time": 1654671, "load_time": 961243842, "dev_size": 50084, "dev_time": 2267404, "ram_size": 0, "avg_time": 1863995256, "recv_time": 2007, "tot_num": 9, "ram_time": 797144114, "info": {"expected-downtime": 957, "status": "colo", "setup-time": 41, "total-time": 407745, "ram": {"total": 2165121024, "postcopy-requests": 0, "dirty-sync-count": 26, "multifd-bytes": 0, "pages-per-second": 287670, "page-size": 4096, "remaining": 0, "mbps": 9130.61304, "transferred": 10294216076, "duplicate": 651182, "dirty-pages-rate": 13499, "skipped": 0, "normal-bytes": 10268299264, "normal": 2506909}}}}
+{"timestamp"
+```
 
-       1. 4核4G 编译内核
+4核4G 编译内核
 
-       ```
-       {"return": {"tot_time": 9662176973, "wait_time": 13666197977, "init_time": 55992172, "stat_time": 0, "dev_size": 0, "dev_time": 937410, "vmstate_time": 20038, "ram_size": 23552, "avg_time": 878379724, "tot_num": 11, "ram_time": 209590288, "info": {"expected-downtime": 892, "status": "colo", "setup-time": 42, "total-time": 1191391, "ram": {"total": 2165121024, "postcopy-requests": 0, "dirty-sync-count": 70, "multifd-bytes": 0, "pages-per-second": 397, "page-size": 4096, "remaining": 0, "mbps": 13.370343, "transferred": 15187177267, "duplicate": 672480, "dirty-pages-rate": 495, "skipped": 0, "normal-bytes": 15151529984, "normal": 3699104}}}}
-       ```
+```json
+{"return": {"tot_time": 8907004496, "wait_time": 18614704199, "init_time": 168837085, "put_time": 26383, "stat_time": 73947335, "resume_time": 710327, "load_time": 1138494420, "dev_size": 23552, "dev_time": 928426, "ram_size": 0, "avg_time": 1484500749, "recv_time": 1985, "tot_num": 6, "ram_time": 270390054, "info": {"expected-downtime": 345, "status": "colo", "setup-time": 73, "total-time": 417721, "ram": {"total": 4312604672, "postcopy-requests": 0, "dirty-sync-count": 29, "multifd-bytes": 0, "pages-per-second": 286570, "page-size": 4096, "remaining": 0, "mbps": 9175.74264, "transferred": 4411979030, "duplicate": 1119195, "dirty-pages-rate": 4820, "skipped": 0, "normal-bytes": 4393324544, "normal": 1072589}}}}
 
-       ```
-       {"return": {"tot_time": 13715646658, "wait_time": 8342171814, "init_time": 129270482, "stat_time": 0, "dev_size": 0, "dev_time": 931910, "vmstate_time": 23924, "ram_size": 23552, "avg_time": 721876139, "tot_num": 19, "ram_time": 108490503, "info": {"expected-downtime": 2760, "status": "colo", "setup-time": 38, "total-time": 175604, "ram": {"total": 2165121024, "postcopy-requests": 0, "dirty-sync-count": 22, "multifd-bytes": 0, "pages-per-second": 621, "page-size": 4096, "remaining": 0, "mbps": 20.513435, "transferred": 2328786212, "duplicate": 562646, "dirty-pages-rate": 1464, "skipped": 0, "normal-bytes": 2319192064, "normal": 566209}}}}
-       ```
-       
-       ```
-       {"return": {"tot_time": 12779748893, "wait_time": 10558913369, "init_time": 154064109, "stat_time": 0, "dev_size": 23552, "dev_time": 988685, "vmstate_time": 26201, "ram_size": 0, "avg_time": 851983259, "tot_num": 15, "ram_time": 165391355, "info": {"expected-downtime": 20, "status": "colo", "setup-time": 41, "total-time": 178237, "ram": {"total": 2165121024, "postcopy-requests": 0, "dirty-sync-count": 18, "multifd-bytes": 0, "pages-per-second": 8211, "page-size": 4096, "remaining": 0, "mbps": 242.355961, "transferred": 2469824640, "duplicate": 564065, "dirty-pages-rate": 834, "skipped": 0, "normal-bytes": 2459942912, "normal": 600572}}}}
-       
-       ```
-       
-       ```
-       {"return": {"tot_time": 6967869903, "wait_time": 18822635604, "init_time": 146788722, "stat_time": 0, "dev_size": 23552, "dev_time": 1021652, "vmstate_time": 671976529, "ram_size": 0, "avg_time": 1161311650, "tot_num": 6, "ram_time": 348230530, "info": {"expected-downtime": 333, "status": "colo", "setup-time": 42, "total-time": 269723, "ram": {"total": 2165121024, "postcopy-requests": 0, "dirty-sync-count": 19, "multifd-bytes": 0, "pages-per-second": 259720, "page-size": 4096, "remaining": 0, "mbps": 8143.17984, "transferred": 3964700842, "duplicate": 580735, "dirty-pages-rate": 4215, "skipped": 0, "normal-bytes": 3951755264, "normal": 964784}}}}
-       
-       ```
-       
-       
+```
 
-  
+8核4G 编译内核
+
+```json
+{"return": {"tot_time": 21011424810, "wait_time": 17466532986, "init_time": 96024858, "put_time": 37645, "stat_time": 83197156, "resume_time": 1169692, "load_time": 1294232898, "dev_size": 32396, "dev_time": 1368028, "ram_size": 0, "avg_time": 1910129528, "recv_time": 2864, "tot_num": 11, "ram_time": 530121020, "info": {"expected-downtime": 564, "status": "colo", "setup-time": 73, "total-time": 620221, "ram": {"total": 4312604672, "postcopy-requests": 0, "dirty-sync-count": 35, "multifd-bytes": 0, "pages-per-second": 294930, "page-size": 4096, "remaining": 0, "mbps": 9235.96776, "transferred": 14227831696, "duplicate": 1204424, "dirty-pages-rate": 7958, "skipped": 0, "normal-bytes": 14189277184, "normal": 3464179}}}}
+
+```
+
+16核4G 编译内核
+
+```json
+{"return": {"tot_time": 20120123124, "wait_time": 16100320899, "init_time": 135084717, "put_time": 48167, "stat_time": 106906023, "resume_time": 1940474, "load_time": 1376798788, "dev_size": 50084, "dev_time": 2160751, "ram_size": 0, "avg_time": 2235569236, "recv_time": 0, "tot_num": 9, "ram_time": 747711836, "info": {"expected-downtime": 918, "status": "colo", "setup-time": 70, "total-time": 295369, "ram": {"total": 4312604672, "postcopy-requests": 0, "dirty-sync-count": 23, "multifd-bytes": 0, "pages-per-second": 294440, "page-size": 4096, "remaining": 0, "mbps": 9382.69728, "transferred": 7827294013, "duplicate": 1161056, "dirty-pages-rate": 13144, "skipped": 0, "normal-bytes": 7801606144, "normal": 1904689}}}}
+
+{"return": {"tot_time": 16801194630, "wait_time": 17782170954, "init_time": 135084717, "put_time": 43762, "stat_time": 93411179, "resume_time": 3392813, "load_time": 1395134074, "dev_size": 50084, "dev_time": 1915789, "ram_size": 0, "avg_time": 2400170661, "recv_time": 3049, "tot_num": 7, "ram_time": 906270930, "info": {"expected-downtime": 1037, "status": "colo", "setup-time": 70, "total-time": 518508, "ram": {"total": 4312604672, "postcopy-requests": 0, "dirty-sync-count": 34, "multifd-bytes": 0, "pages-per-second": 293420, "page-size": 4096, "remaining": 0, "mbps": 9256.82544, "transferred": 15981245264, "duplicate": 1246396, "dirty-pages-rate": 14582, "skipped": 0, "normal-bytes": 15938895872, "normal": 3891332}}}}
+
+```
+
+```
+# { "execute": "info_checkpoint" }
+# { "execute": "reset_checkpoint" }
+```

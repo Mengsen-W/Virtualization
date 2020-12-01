@@ -89,12 +89,28 @@ primary_ip = localhost
 
 // primary
 {'execute':'qmp_capabilities'}
-// 对端ip
+// peer ip
 {'execute': 'human-monitor-command', 'arguments': {'command-line': 'drive_add -n buddy driver=replication,mode=primary,file.driver=nbd,file.host=20.21.22.71,file.port=9999,file.export=parent0,node-name=replication0'}}
 {'execute': 'x-blockdev-change', 'arguments':{'parent': 'colo-disk0', 'node': 'replication0' } }
 {'execute': 'migrate-set-capabilities', 'arguments': {'capabilities': [ {'capability': 'x-colo', 'state': true } ] } }
 {'execute': 'migrate', 'arguments': {'uri': 'tcp:20.21.22.71:9998' } }
 ```
+
+```json
+// secondary
+{'execute':'qmp_capabilities'}
+{'execute': 'nbd-server-start', 'arguments': {'addr': {'type': 'inet', 'data': {'host': '0.0.0.0', 'port': '9999'} } } }
+{'execute': 'nbd-server-add', 'arguments': {'device': 'parent0', 'writable': true } }
+
+// primary
+{'execute':'qmp_capabilities'}
+{'execute': 'human-monitor-command', 'arguments': {'command-line': 'drive_add -n buddy driver=replication,mode=primary,file.driver=nbd,file.host=127.0.0.2,file.port=9999,file.export=parent0,node-name=replication0'}}
+{'execute': 'x-blockdev-change', 'arguments':{'parent': 'colo-disk0', 'node': 'replication0' } }
+{'execute': 'migrate-set-capabilities', 'arguments': {'capabilities': [ {'capability': 'x-colo', 'state': true } ] } }
+{'execute': 'migrate', 'arguments': {'uri': 'tcp:127.0.0.2:9998' } }
+```
+
+
 
 ## 5. 开启追踪时间设置输出文件
 
@@ -139,20 +155,15 @@ human-monitor-command command-line='change vnc 0.0.0.0:1'
 
 5. 对于`colo_incoming_process_checkpoint`能看到他走到函数末端，然后进入等待直到收到`CHECKPOINT_REQUES`消息唤醒
 
-6. ```
+6. ```一些命令
    firewall-cmd --query-port=xxx/tcp => no
    firewall-cmd --add-port=xxx/tcp => success
+   ps -ef |grep main.py |awk '{print $2}'|xargs kill -9
+   kill -9 $(ps -ef|grep 进程名关键字|gawk '$0 !~/grep/ {print $2}' |tr -s '\n' ' ')
    ```
 
-   
+7. 当主从节点配置不一致时会报错误
 
-## 9. 未来计划
-
-1. 传输的数据量大小
-2. 各阶段细节时间
-3. 火焰图
-
-## 10. 一些疑问
-
-1. 这些函数最后会回调`filter设备`，这部分代码还不清晰
-2. 
+```
+   qemu-system-x86_64: failed to save SaveStateEntry with id(name): 2(ram)
+```

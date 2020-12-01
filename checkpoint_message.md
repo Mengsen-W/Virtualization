@@ -10,11 +10,13 @@
                 'init_time': 'int64', 'wait_time': 'int64',
                 'avg_time': 'int64', 'stat_time': 'int64',
                 'dev_time': 'int64', 'ram_time': 'int64',
-                'put_time': 'int64', 'load_time': 'int64',
-                'resume_time': 'int64',
+                'put_time': 'int64', 'recv_time': 'int64',
+                'load_time': 'int64', 'resume_time': 'int64',
                 'dev_size': 'int64', 'ram_size': 'int64',
                 'info': 'MigrationInfo' } }
    ```
+   
+   
    
    ```json
    # { "execute": "info_checkpoint" }
@@ -107,50 +109,47 @@
    我这里仍然释放结构体
    
 ```c
-   /**
+/**
  * @Brief: destroy global checkpoint_recorder
-    * @Param: [void]
-    * @Return [void]
-    * @Author: mengsen
-    * @Date: 2020-10-23 10:56:11
-   **/
-   static void checkpoint_recorder_destroy(void) {
-       if(g_cr != NULL) {
-           qapi_free_MigrationInfo(g_cr->info);
-       }
-       return;
-   }
+ * @Param: [void]
+ * @Return [void]
+ * @Author: mengsen
+ * @Date: 2020-10-23 10:56:11
+**/
+static void checkpoint_recorder_destroy(void) {
+    if(g_cr != NULL) {
+        qapi_free_MigrationInfo(g_cr->info);
+    }
+    return;
+}
 ```
 
    这里复用了一部分`MigrationInfo`的代码
 
    ```c
-   /**
-    * @Brief: fill global checkpoint_recorder to temporary checkpoint_recorder,
-    * and that temporary used lazy loading
-    * @Param: cr [checkpoint_recorder *] temporary checkpoint_recorder pointer
-    * @Return: [void]
-    * @Author: mengsen
-    * @Date: 2020-10-23 10:40:22
-   **/
-   static void fill_checkpoint_recorder(checkpoint_recorder *cr){
-       cr->tot_time = g_cr->tot_time;
-       cr->tot_num = g_cr->tot_num;
-       cr->init_time = g_cr->init_time;
-       
-       cr->wait_time = g_cr->wait_time / cr->tot_num;
-       cr->avg_time = cr->tot_time / cr->tot_num;
-       cr->dev_time = g_cr->dev_time / cr->tot_num;
-       cr->ram_time = g_cr->ram_time / cr->tot_num;
-       cr->vmstate_time = g_cr->vmstate_time / cr->tot_num;
-       cr->dev_size = g_cr->dev_size / cr->tot_num;
-       cr->ram_size = g_cr->ram_size / cr->tot_num;
-   
-       fill_destination_migration_info(cr->info);
-       fill_source_migration_info(cr->info);
-       
-       return;
-   }
+/**
+ * @Brief: fill global checkpoint_recorder to temporary checkpoint_recorder,
+ * and that temporary used lazy loading
+ * @Param: cr [checkpoint_recorder *] temporary checkpoint_recorder pointer
+ * @Return: [void]
+ * @Author: mengsen
+ * @Date: 2020-10-23 10:40:22
+**/
+static void fill_checkpoint_recorder(checkpoint_recorder *cr){
+    cr->tot_time = g_cr->tot_time;
+    cr->tot_num = g_cr->tot_num;
+    cr->init_time = g_cr->init_time;
+    cr->wait_time = g_cr->wait_time / cr->tot_num;
+    cr->avg_time = cr->tot_time / cr->tot_num;
+    cr->dev_time = g_cr->dev_time / cr->tot_num;
+    cr->ram_time = g_cr->ram_time / cr->tot_num;
+    cr->vmstate_time = g_cr->vmstate_time / cr->tot_num;
+    cr->dev_size = g_cr->dev_size / cr->tot_num;
+    cr->ram_size = g_cr->ram_size / cr->tot_num;
+    fill_destination_migration_info(cr->info);
+    fill_source_migration_info(cr->info);
+    return;
+}
    
    ```
 
@@ -221,7 +220,7 @@
           temp_begin = get_clock(); 	// device_time 开始点
           qemu_save_device_state();
           temp_end = get_clock();		// device_time 结束点
-          g_cr->stat_time += temp_end - temp_begin;
+          g_cr->dev_time += temp_end - temp_begin;
       
           temp_begin_time = get_clock();	// ram_time 开始点
           qemu_savevm_live_state(s->to_dst_file);
@@ -274,7 +273,7 @@
           temp_begin = get_clock();	// wait_time 开始点
           receive_msg(REQUEST);
           temp_end = get_clock();		// wait_time 结束点
-          g_cr->wait_time += temp_end - temp_begin();
+          g_cr->wait_time += temp_end - temp_begin;
           temp_begin = get_clock();	// tot_time 开始点
           colo_incoming_process_checkpoint();
           temp_end = get_clock();		// tot_time 结束点

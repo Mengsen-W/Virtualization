@@ -124,27 +124,28 @@
           1      */
        442      // migrate_set_state(&mis->state, MIGRATION_STATUS_ACTIVE,
           1     //                  MIGRATION_STATUS_COMPLETED);
-              	migrate_set_state_user(&mis->state, MIGRATION_STATUS_ACTIVE,
+              	trace_migrate_set_state_user(&mis->state, MIGRATION_STATUS_ACTIVE,
           1                       MIGRATION_STATUS_COMPLETED);
+       		// 修改源代码 上面为修改值
           2     qemu_bh_delete(mis->bh);
           3     migration_incoming_state_destroy();
           4 }
           5
        
        
-       ```
-
-    4. 重新编译
-
+   ```
+    
+4. 重新编译
+    
        ```shell
          CC      migration/migration.o
          LINK    moxie-softmmu/qemu-system-moxie
          # ....
        
-       ```
-
-    5. qmp命令
-
+   ```
+    
+5. qmp命令
+    
        ```json
        {'execute': 'trace-event-set-state', 'arguments': {'name': 'colo_checkpoint_user_log', 'enable': true} }
        {'execute': 'human-monitor-command', 'arguments': {'command-line': 'logfile /home/data/mengsen/log/test.log'}}

@@ -31,6 +31,6 @@
          Pass 5: run completed in 10usr/30sys/384real ms.
          ```
 
-      3. 
-
 2. ## 使用过程
+
+   1. `qemu`支持使用`systemtap`作为后端的日志输出形式，

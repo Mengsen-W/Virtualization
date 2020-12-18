@@ -68,7 +68,7 @@
 
 ### 	7. multifd-channels: int
 
-​	迁移数据传输的并行数，类似于socket数量，默认是2
+​	迁移数据传输的并行数，类似于socket数量，默认是2，在1-255之间
 
 ### 	8. xbzrle-cache-size: int
 

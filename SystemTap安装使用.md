@@ -10,6 +10,38 @@
       
       1. `uname -rm`
       
+      2. ```shell
+         (base) [root@node0 home]# rpm -qa|grep kernel
+         kernel-debuginfo-common-x86_64-3.10.0-1127.19.1.el7.x86_64
+         kernel-debug-devel-3.10.0-1160.6.1.el7.x86_64
+         kernel-tools-3.10.0-1160.6.1.el7.x86_64
+         kernel-devel-3.10.0-1160.6.1.el7.x86_64
+         kernel-debuginfo-3.10.0-1127.19.1.el7.x86_64
+         kernel-3.10.0-957.el7.x86_64
+         kernel-3.10.0-1127.19.1.el7.x86_64
+         kernel-tools-libs-3.10.0-1160.6.1.el7.x86_64
+         kernel-headers-3.10.0-1160.6.1.el7.x86_64
+         kernel-3.10.0-1160.6.1.el7.x86_64
+         kernel-devel-3.10.0-1127.19.1.el7.x86_64
+         (base) [root@node0 home]# uname -rm
+         3.10.0-1160.6.1.el7.x86_64 x86_64
+         ```
+      
+         真尼玛坑爹，这两个版本都不一样，我按照`uname -rm`下的debug包版本全是错误的
+      
+         ```shell
+         (base) [root@node0 home]# rpm -qa|grep kernel
+         kernel-tools-3.10.0-1160.6.1.el7.x86_64
+         kernel-devel-3.10.0-1160.6.1.el7.x86_64
+         kernel-tools-libs-3.10.0-1160.6.1.el7.x86_64
+         kernel-headers-3.10.0-1160.6.1.el7.x86_64
+         kernel-3.10.0-1160.6.1.el7.x86_64
+         (base) [root@node0 home]# uname -a
+         Linux node0 3.10.0-1160.6.1.el7.x86_64 #1 SMP Tue Nov 17 13:59:11 UTC 2020 x86_64 x86_64 x86_64 GNU/Linux
+         ```
+      
+         修复好了，应该版本号是一致的
+      
    3. `stap-prep` 检查缺少内容
 
       1. `kernel-debuginfo`下载 http://debuginfo.centos.org/7/x86_64/
@@ -31,6 +63,35 @@
          Pass 5: run completed in 10usr/30sys/384real ms.
          ```
 
-2. ## 使用过程
+2. ## qemu log类型
 
-   1. `qemu`支持使用`systemtap`作为后端的日志输出形式，
+   1. log（默认） –发送给QEMU日志系统每个事件的printf格式化字符串，然后系统写入stderr
+   
+   2. syslog –通过syslog发送的每个事件的printf格式化字符串
+   
+   3. simple–写入文件或fifo管道的每个事件的二进制数据流
+   
+   4. ftrace –发送给内核ftrace工具的每个事件的printf格式化字符串
+   
+   5. dtrace –通过dtrace或systemtap动态启用的用户空间探针标记
+   
+      我选择这个类型编译会出错
+   
+      ```shell
+      ERROR: dtrace command is not found in PATH /root/anaconda3/bin:/root/anaconda3/condabin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/root/bin
+      ```
+   
+   6. ust –通过LTT-ng动态启用用户空间探针标记
+   
+3. ## 使用过程
+
+   1. 使用脚本生成`stp`
+
+      ```shell
+      cd qemu
+      ./scripts/tracetool.py --backends=dtrace --format=stap --binary /home/qemu/qemu-binary --target-type system --target-name x86_64 --group=all ./trace-events-all > qemu.stp
+      
+      ```
+
+      
+

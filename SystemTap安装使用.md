@@ -4,7 +4,7 @@
 
    1. `yum`安装必要组件
       
-      1. `yum install systemtap systemtap-runtime kernel-devel`
+      1. `yum install systemtap systemtap-runtime kernel-devel systemtap-sdt-devel`
       
    2. 查看内核版本
       
@@ -47,12 +47,15 @@
       1. `kernel-debuginfo`下载 http://debuginfo.centos.org/7/x86_64/
       2. `rpm -ivh` 解压包
       3. 再次使用 `stap-perp` 检查
+      4. `dtrace --help`
 
    4. 测试`stap`命令
 
       1. `stap -ve 'probe begin{printf("Hello, World\n"); exit();}'`
 
-      2. ```shell
+      2. `stap -v -e 'probe vfs.read {printf("read performed\n"); exit()}'`
+      
+      3. ```shell
          (base) [root@node0 systemtap]# stap -ve 'probe begin{printf("Hello, World\n"); exit();}'
          Pass 1: parsed user script and 476 library scripts using 272288virt/69516res/3484shr/66136data kb, in 670usr/30sys/701real ms.
          Pass 2: analyzed script: 1 probe, 1 function, 0 embeds, 0 globals using 273740virt/71360res/3820shr/67588data kb, in 0usr/10sys/10real ms.
@@ -61,6 +64,15 @@
          Pass 5: starting run.
          Hello, World
          Pass 5: run completed in 10usr/30sys/384real ms.
+         
+         (base) [root@node0 systemtap]# stap -v -e 'probe vfs.read {printf("read performed\n"); exit()}'
+         Pass 1: parsed user script and 525 library scripts using 411904virt/207084res/3484shr/205752data kb, in 2250usr/120sys/2365real ms.
+         Pass 2: analyzed script: 1 probe, 1 function, 7 embeds, 0 globals using 591064virt/381920res/4816shr/384912data kb, in 1910usr/490sys/2406real ms.
+         Pass 3: using cached /root/.systemtap/cache/7e/stap_7e37194c4cb6bf8ae90f12a4163ca73a_2799.c
+         Pass 4: using cached /root/.systemtap/cache/7e/stap_7e37194c4cb6bf8ae90f12a4163ca73a_2799.ko
+         Pass 5: starting run.
+         read performed
+         Pass 5: run completed in 10usr/70sys/391real ms.
          ```
 
 2. ## qemu log类型
@@ -74,12 +86,6 @@
    4. ftrace –发送给内核ftrace工具的每个事件的printf格式化字符串
    
    5. dtrace –通过dtrace或systemtap动态启用的用户空间探针标记
-   
-      我选择这个类型编译会出错
-   
-      ```shell
-      ERROR: dtrace command is not found in PATH /root/anaconda3/bin:/root/anaconda3/condabin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/root/bin
-      ```
    
    6. ust –通过LTT-ng动态启用用户空间探针标记
    
